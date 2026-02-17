@@ -13,6 +13,8 @@ except ImportError:
     print("Error: PyYAML is required. Install it with: pip install PyYAML", file=sys.stderr)
     sys.exit(1)
 
+from lib.sroq_scan import run_scan
+
 
 def load_config(config_file: str) -> Dict[str, Any]:
     """Load YAML configuration file."""
@@ -165,6 +167,26 @@ def print_config(resolved: Dict[str, Any]) -> None:
     print(json.dumps(output, indent=2))
 
 
+def print_summary(results: Dict[str, Any]) -> None:
+    """Print minimal scan summary to console."""
+    for network in results['networks']:
+        name = network['name']
+        cidr = network['cidr']
+        hosts = network['hosts']
+        num_hosts = len(hosts)
+
+        # Calculate totals
+        total_open_ports = sum(len(host['open_ports']) for host in hosts)
+        total_exploits = sum(host['vulners_exploit_count'] for host in hosts)
+
+        print(f"Network: {name}")
+        print(f"  CIDR: {cidr}")
+        print(f"  Hosts: {num_hosts}")
+        print(f"  Total Open Ports: {total_open_ports}")
+        print(f"  Total Exploits: {total_exploits}")
+        print()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Sroq - A clean CLI tool for network scanning',
@@ -238,8 +260,44 @@ def main():
         print_config(resolved)
         sys.exit(0)
 
-    # Phase 1: Configuration validation complete
-    # Phase 2+ will implement actual scanning logic
+    # Determine ports policy
+    ports_policy = "top-1000"
+    if 'scan' in config and 'ports' in config['scan']:
+        ports_policy = config['scan']['ports']
+
+    # Determine bruteforce credfile
+    credfile = None
+    if 'bruteforce' in config and 'credfile' in config['bruteforce']:
+        credfile = config['bruteforce']['credfile']
+
+    # Run scan
+    results = run_scan(
+        resolved['networks'],
+        list(resolved['excludes']),
+        ports_policy,
+        resolved['brute'],
+        credfile
+    )
+
+    # Determine output directory
+    out_dir = "./out"
+    if 'general' in config and 'out_dir' in config['general']:
+        out_dir = config['general']['out_dir']
+
+    # Ensure output directory exists
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+
+    # Save results as JSON
+    timestamp = results['timestamp']
+    json_filename = f"sroq_{timestamp}.json"
+    json_path = Path(out_dir) / json_filename
+
+    with open(json_path, 'w') as f:
+        json.dump(results, f, indent=2)
+
+    # Print summary
+    print_summary(results)
+    print(f"Saved JSON: {json_path}")
 
 
 if __name__ == '__main__':
