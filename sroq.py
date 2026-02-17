@@ -282,7 +282,8 @@ def main():
             list(resolved['excludes']),
             ports_policy,
             resolved['brute'],
-            credfile
+            credfile,
+            resolved['verbose']
         )
     except KeyboardInterrupt:
         print("\nScan interrupted.")

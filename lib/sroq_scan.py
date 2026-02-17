@@ -100,7 +100,8 @@ def run_scan(
     excludes: list[str],
     ports_policy: str,
     brute_enabled: bool,
-    credfile: str | None
+    credfile: str | None,
+    verbose: bool = False
 ) -> dict:
     """
     Run complete scan across multiple networks.
@@ -111,6 +112,7 @@ def run_scan(
         ports_policy: Port scanning policy to apply
         brute_enabled: Whether brute force is enabled (placeholder for Phase 3)
         credfile: Path to credentials file (placeholder for Phase 3)
+        verbose: Enable verbose runtime output
 
     Returns:
         Dictionary containing complete scan results:
@@ -139,12 +141,24 @@ def run_scan(
         network_name = network["name"]
         network_cidr = network["cidr"]
 
+        # Verbose: before host discovery
+        if verbose:
+            print(f"[{network_name}] Discovering hosts in {network_cidr}...")
+
         # Discover hosts in this network
         live_hosts = discover_hosts(network_cidr, excludes)
 
+        # Verbose: after host discovery
+        if verbose:
+            print(f"[{network_name}] Found {len(live_hosts)} live hosts.")
+
         # Scan each discovered host
         host_results = []
-        for host_ip in live_hosts:
+        for i, host_ip in enumerate(live_hosts, 1):
+            # Verbose: before scanning each host
+            if verbose:
+                print(f"[{network_name}] Scanning {host_ip} ({i}/{len(live_hosts)})...")
+
             # Perform detailed scan
             host_data = scan_host(host_ip, ports_policy)
 
