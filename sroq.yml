@@ -1,0 +1,17 @@
+targets:
+  networks:
+    - name: "lab"
+      cidr: "172.16.1.32/29"
+  exclude: []
+
+scan:
+  ports: "top-1000"
+
+report:
+  graph_default: false
+  excel_default: false
+  email_default: false
+
+bruteforce:
+  credfile: "./creds.example.txt"
+
