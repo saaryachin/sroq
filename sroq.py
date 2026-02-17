@@ -5,6 +5,7 @@ import sys
 import json
 from pathlib import Path
 from typing import Optional, Dict, List, Set, Any
+from datetime import datetime
 import ipaddress
 
 try:
@@ -270,14 +271,32 @@ def main():
     if 'bruteforce' in config and 'credfile' in config['bruteforce']:
         credfile = config['bruteforce']['credfile']
 
-    # Run scan
-    results = run_scan(
-        resolved['networks'],
-        list(resolved['excludes']),
-        ports_policy,
-        resolved['brute'],
-        credfile
-    )
+    # Run scan with runtime tracking
+    print("Starting scan...")
+
+    start_time = datetime.now()
+
+    try:
+        results = run_scan(
+            resolved['networks'],
+            list(resolved['excludes']),
+            ports_policy,
+            resolved['brute'],
+            credfile
+        )
+    except KeyboardInterrupt:
+        print("\nScan interrupted.")
+        sys.exit(130)
+
+    finish_time = datetime.now()
+    duration = (finish_time - start_time).total_seconds()
+
+    print("Scan completed.")
+
+    # Add runtime metadata to results
+    results["started_at"] = start_time.isoformat()
+    results["finished_at"] = finish_time.isoformat()
+    results["duration_seconds"] = duration
 
     # Determine output directory
     out_dir = "./out"
