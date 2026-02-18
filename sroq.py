@@ -260,6 +260,13 @@ def print_summary(results: Dict[str, Any]) -> None:
         print(f"  Total Unique CVEs: {total_cves}")
         print(f"  Max CVSS: {max_cvss}")
         print(f"  Severity: critical={agg_severity['critical']} high={agg_severity['high']} medium={agg_severity['medium']} low={agg_severity['low']} unknown={agg_severity['unknown']}")
+
+        # Top risky hosts (up to 3, sorted by risk_score desc)
+        top = sorted(hosts, key=lambda h: -h.get('risk_score', 0))[:3]
+        if top:
+            print(f"  Top risky hosts:")
+            for h in top:
+                print(f"    {h['ip']}  risk={h.get('risk_score', 0)}  CVEs={h['vulners']['unique_cve_count']}  max_cvss={h['vulners']['max_cvss']}")
         print()
 
 

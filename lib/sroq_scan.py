@@ -96,11 +96,14 @@ def _build_vulners_summary(unique_cves: dict) -> dict:
         if cvss > max_cvss:
             max_cvss = cvss
 
+    # Sort CVEs deterministically: cvss descending, id ascending
+    sorted_cves = sorted(unique_cves.items(), key=lambda x: (-x[1], x[0]))
+
     return {
         "unique_cve_count": len(unique_cves),
         "severity": severity,
         "max_cvss": max_cvss,
-        "cves": [{"id": cve_id, "cvss": cvss} for cve_id, cvss in unique_cves.items()]
+        "cves": [{"id": cve_id, "cvss": cvss} for cve_id, cvss in sorted_cves]
     }
 
 
@@ -164,10 +167,22 @@ def scan_host(ip: str, ports_policy: str) -> dict:
                         if cve_id not in unique_cves or cvss > unique_cves[cve_id]:
                             unique_cves[cve_id] = cvss
 
+    vulners = _build_vulners_summary(unique_cves)
+
+    # Compute weighted risk score from severity counts
+    _RISK_WEIGHTS = {"critical": 10, "high": 6, "medium": 3, "low": 1, "unknown": 2}
+    severity = vulners["severity"]
+    risk_score = sum(severity[level] * _RISK_WEIGHTS[level] for level in _RISK_WEIGHTS)
+
+    # Sum of all unique CVE CVSS scores
+    risk_cvss_sum = round(sum(cve["cvss"] for cve in vulners["cves"]), 2)
+
     return {
         "ip": ip,
         "open_ports": sorted(open_ports),
-        "vulners": _build_vulners_summary(unique_cves)
+        "vulners": vulners,
+        "risk_score": risk_score,
+        "risk_cvss_sum": risk_cvss_sum
     }
 
 
