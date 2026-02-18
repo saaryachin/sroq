@@ -16,6 +16,7 @@ except ImportError:
 
 from lib.sroq_scan import run_scan
 from lib.sroq_report import generate_severity_graph
+from lib.sroq_export import generate_csv
 
 
 def load_config(config_file: str) -> Dict[str, Any]:
@@ -88,6 +89,7 @@ def merge_configs(cli_args: argparse.Namespace, config: Dict[str, Any]) -> Dict[
         'excludes': set(),
         'brute': False,
         'graph': False,
+        'csv': False,
         'email': False,
         'excel': False,
         'verbose': False,
@@ -116,6 +118,7 @@ def merge_configs(cli_args: argparse.Namespace, config: Dict[str, Any]) -> Dict[
     if 'report' in config:
         report = config['report']
         resolved['graph'] = report.get('graph_default', False)
+        resolved['csv'] = report.get('csv_default', False)
         resolved['email'] = report.get('email_default', False)
         resolved['excel'] = report.get('excel_default', False)
 
@@ -139,6 +142,9 @@ def merge_configs(cli_args: argparse.Namespace, config: Dict[str, Any]) -> Dict[
 
     if cli_args.graph:
         resolved['graph'] = True
+
+    if cli_args.csv:
+        resolved['csv'] = True
 
     if cli_args.email:
         resolved['email'] = True
@@ -228,6 +234,7 @@ def print_config(resolved: Dict[str, Any], config_file_used: str, config_exists:
         'excludes': sorted(list(resolved['excludes'])),
         'brute': resolved['brute'],
         'graph': resolved['graph'],
+        'csv': resolved['csv'],
         'email': resolved['email'],
         'excel': resolved['excel'],
         'verbose': resolved['verbose'],
@@ -301,6 +308,12 @@ def main():
     parser.add_argument(
         '-g', '--graph',
         help='Generate graph output',
+        action='store_true',
+    )
+
+    parser.add_argument(
+        '-c', '--csv',
+        help='Export results as CSV',
         action='store_true',
     )
 
@@ -420,6 +433,12 @@ def main():
         graph_path = generate_severity_graph(results, out_dir)
         if graph_path:
             print(f"Saved graph: {graph_path}")
+
+    # Export CSV if requested
+    if resolved['csv']:
+        csv_path = generate_csv(results, out_dir)
+        if csv_path:
+            print(f"Saved CSV: {csv_path}")
 
 
 if __name__ == '__main__':
