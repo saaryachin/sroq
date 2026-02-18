@@ -17,6 +17,7 @@ except ImportError:
 from lib.sroq_scan import run_scan
 from lib.sroq_report import generate_severity_graph
 from lib.sroq_export import generate_csv
+from lib.sroq_excel import generate_excel
 
 
 def load_config(config_file: str) -> Dict[str, Any]:
@@ -145,6 +146,9 @@ def merge_configs(cli_args: argparse.Namespace, config: Dict[str, Any]) -> Dict[
 
     if cli_args.csv:
         resolved['csv'] = True
+
+    if cli_args.excel:
+        resolved['excel'] = True
 
     if cli_args.email:
         resolved['email'] = True
@@ -318,6 +322,12 @@ def main():
     )
 
     parser.add_argument(
+        '-x', '--excel',
+        help='Export results as Excel (.xlsx)',
+        action='store_true',
+    )
+
+    parser.add_argument(
         '-e', '--email',
         help='Include email collection',
         action='store_true',
@@ -439,6 +449,15 @@ def main():
         csv_path = generate_csv(results, out_dir)
         if csv_path:
             print(f"Saved CSV: {csv_path}")
+
+    # Export Excel if requested (also generates CSV)
+    if resolved['excel']:
+        csv_path = generate_csv(results, out_dir)
+        if csv_path:
+            print(f"Saved CSV: {csv_path}")
+        excel_path = generate_excel(results, out_dir)
+        if excel_path:
+            print(f"Saved Excel: {excel_path}")
 
 
 if __name__ == '__main__':
