@@ -15,6 +15,7 @@ except ImportError:
     sys.exit(1)
 
 from lib.sroq_scan import run_scan
+from lib.sroq_report import generate_severity_graph
 
 
 def load_config(config_file: str) -> Dict[str, Any]:
@@ -406,6 +407,12 @@ def main():
     # Print summary
     print_summary(results)
     print(f"Saved JSON: {json_path}")
+
+    # Generate graph if requested
+    if resolved['graph']:
+        graph_path = generate_severity_graph(results, out_dir)
+        if graph_path:
+            print(f"Saved graph: {graph_path}")
 
 
 if __name__ == '__main__':
