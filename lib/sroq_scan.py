@@ -37,6 +37,73 @@ def discover_hosts(cidr: str, excludes: list[str]) -> list[str]:
     return sorted([host for host in nm.all_hosts() if nm[host].state() == "up"])
 
 
+def _parse_vulners_cves(vulners_output: str) -> dict:
+    """
+    Extract CVE entries from vulners script output.
+
+    Only lines starting with 'CVE-' are parsed. Exploit references (EDB-ID, MSF, etc.)
+    are ignored. Returns a dict keyed by CVE ID for deduplication.
+
+    Args:
+        vulners_output: Raw string from port_info["script"]["vulners"]
+
+    Returns:
+        dict mapping CVE ID -> cvss float, e.g. {"CVE-2020-1472": 10.0}
+    """
+    cves = {}
+    for line in vulners_output.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("CVE-"):
+            continue
+        parts = stripped.split()
+        if len(parts) < 2:
+            continue
+        cve_id = parts[0]
+        try:
+            cvss = float(parts[1])
+        except ValueError:
+            continue
+        # Deduplicate: keep highest score if seen on multiple ports
+        if cve_id not in cves or cvss > cves[cve_id]:
+            cves[cve_id] = cvss
+    return cves
+
+
+def _build_vulners_summary(unique_cves: dict) -> dict:
+    """
+    Build structured vulners summary from deduplicated CVE dict.
+
+    Args:
+        unique_cves: dict mapping CVE ID -> cvss float
+
+    Returns:
+        Structured vulners dict with counts, severity breakdown, max_cvss, and cve list.
+    """
+    severity = {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
+    max_cvss = 0.0
+
+    for cvss in unique_cves.values():
+        if cvss >= 9.0:
+            severity["critical"] += 1
+        elif cvss >= 7.0:
+            severity["high"] += 1
+        elif cvss >= 4.0:
+            severity["medium"] += 1
+        elif cvss > 0.0:
+            severity["low"] += 1
+        else:
+            severity["unknown"] += 1
+        if cvss > max_cvss:
+            max_cvss = cvss
+
+    return {
+        "unique_cve_count": len(unique_cves),
+        "severity": severity,
+        "max_cvss": max_cvss,
+        "cves": [{"id": cve_id, "cvss": cvss} for cve_id, cvss in unique_cves.items()]
+    }
+
+
 def scan_host(ip: str, ports_policy: str) -> dict:
     """
     Perform detailed scan on a single host with service detection and vulnerability scanning.
@@ -50,7 +117,12 @@ def scan_host(ip: str, ports_policy: str) -> dict:
         {
             "ip": str,
             "open_ports": list[int],
-            "vulners_exploit_count": int
+            "vulners": {
+                "unique_cve_count": int,
+                "severity": {"critical": int, "high": int, "medium": int, "low": int, "unknown": int},
+                "max_cvss": float,
+                "cves": [{"id": str, "cvss": float}]
+            }
         }
     """
     nm = nmap.PortScanner()
@@ -73,7 +145,7 @@ def scan_host(ip: str, ports_policy: str) -> dict:
 
     # Initialize result variables
     open_ports = []
-    exploit_count = 0
+    unique_cves = {}  # keyed by CVE ID for cross-port deduplication
 
     # Parse scan results safely from scan_result dict
     host_data = scan_result.get("scan", {}).get(ip, {})
@@ -86,12 +158,16 @@ def scan_host(ip: str, ports_policy: str) -> dict:
                 if isinstance(port_info, dict) and port_info.get("state") == "open":
                     open_ports.append(int(port))
                     vulners_output = port_info.get("script", {}).get("vulners", "")
-                    exploit_count += vulners_output.count("*EXPLOIT*")
+                    port_cves = _parse_vulners_cves(vulners_output)
+                    for cve_id, cvss in port_cves.items():
+                        # Keep highest score seen across all ports
+                        if cve_id not in unique_cves or cvss > unique_cves[cve_id]:
+                            unique_cves[cve_id] = cvss
 
     return {
         "ip": ip,
         "open_ports": sorted(open_ports),
-        "vulners_exploit_count": exploit_count
+        "vulners": _build_vulners_summary(unique_cves)
     }
 
 

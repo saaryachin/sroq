@@ -243,15 +243,22 @@ def print_summary(results: Dict[str, Any]) -> None:
         hosts = network['hosts']
         num_hosts = len(hosts)
 
-        # Calculate totals
+        # Aggregate CVE stats across all hosts in this network
         total_open_ports = sum(len(host['open_ports']) for host in hosts)
-        total_exploits = sum(host['vulners_exploit_count'] for host in hosts)
+        total_cves = sum(host['vulners']['unique_cve_count'] for host in hosts)
+        max_cvss = max((host['vulners']['max_cvss'] for host in hosts), default=0.0)
+        agg_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
+        for host in hosts:
+            for level, count in host['vulners']['severity'].items():
+                agg_severity[level] += count
 
         print(f"Network: {name}")
         print(f"  CIDR: {cidr}")
         print(f"  Hosts: {num_hosts}")
         print(f"  Total Open Ports: {total_open_ports}")
-        print(f"  Total Exploits: {total_exploits}")
+        print(f"  Total Unique CVEs: {total_cves}")
+        print(f"  Max CVSS: {max_cvss}")
+        print(f"  Severity: critical={agg_severity['critical']} high={agg_severity['high']} medium={agg_severity['medium']} low={agg_severity['low']} unknown={agg_severity['unknown']}")
         print()
 
 
