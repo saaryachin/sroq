@@ -95,6 +95,45 @@ def scan_host(ip: str, ports_policy: str) -> dict:
     }
 
 
+def execute_brute_force(ip: str, network_name: str, credfile: str | None, verbose: bool) -> dict:
+    """
+    Execute brute force attacks on a host.
+
+    Args:
+        ip: Target IP address
+        network_name: Name of the network being scanned
+        credfile: Path to credentials file (None if not available)
+        verbose: Print verbose feedback
+
+    Returns:
+        Dictionary with brute force results:
+        {
+            "enabled": bool,
+            "success_ports": list[int],
+            "success_count": int
+        }
+    """
+    # Verbose: before brute force
+    if verbose:
+        print(f"[{network_name}] Conducting brute force against {ip}...")
+
+    # Brute force execution placeholder for Phase 3
+    # In later phases, this will attempt brute force attacks on common ports
+    # using the provided credentials file
+    success_ports = []
+    success_count = 0
+
+    # Verbose: after brute force
+    if verbose:
+        print(f"[{network_name}] Brute force completed for {ip} ({success_count} successes).")
+
+    return {
+        "enabled": True,
+        "success_ports": success_ports,
+        "success_count": success_count
+    }
+
+
 def run_scan(
     networks: list[dict],
     excludes: list[str],
@@ -162,12 +201,17 @@ def run_scan(
             # Perform detailed scan
             host_data = scan_host(host_ip, ports_policy)
 
-            # Add brute force placeholder (Phase 3)
-            host_data["brute"] = {
-                "enabled": brute_enabled,
-                "success_ports": [],
-                "success_count": 0
-            }
+            # Execute brute force if enabled
+            if brute_enabled:
+                brute_result = execute_brute_force(host_ip, network_name, credfile, verbose)
+                host_data["brute"] = brute_result
+            else:
+                # Brute force disabled: placeholder only
+                host_data["brute"] = {
+                    "enabled": False,
+                    "success_ports": [],
+                    "success_count": 0
+                }
 
             host_results.append(host_data)
 

@@ -4,7 +4,7 @@ import argparse
 import sys
 import json
 from pathlib import Path
-from typing import Optional, Dict, List, Set, Any
+from typing import Optional, Dict, List, Set, Any, Tuple
 from datetime import datetime
 import ipaddress
 
@@ -153,9 +153,76 @@ def merge_configs(cli_args: argparse.Namespace, config: Dict[str, Any]) -> Dict[
     return resolved
 
 
-def print_config(resolved: Dict[str, Any]) -> None:
-    """Print resolved configuration in JSON format."""
+def validate_config(resolved: Dict[str, Any], config: Dict[str, Any], cli_target: Optional[str], verbose: bool) -> Tuple[bool, str]:
+    """
+    Validate resolved configuration.
+
+    Returns:
+        (is_valid, error_message)
+    """
+    # Check networks
+    if not cli_target:  # If --target not provided, networks from config must exist
+        if not resolved['networks']:
+            return False, "Invalid config: networks must be non-empty"
+
+        for i, net in enumerate(resolved['networks']):
+            if 'name' not in net or not isinstance(net['name'], str) or not net['name']:
+                return False, f"Invalid config: network {i} missing or empty 'name'"
+            if 'cidr' not in net or not isinstance(net['cidr'], str):
+                return False, f"Invalid config: network {i} missing 'cidr'"
+            try:
+                ipaddress.ip_network(net['cidr'], strict=False)
+            except ValueError:
+                return False, f"Invalid config: network {i} has invalid CIDR: {net['cidr']}"
+
+    # Check excludes
+    if resolved['excludes']:
+        for exclude in resolved['excludes']:
+            # Already normalized, should be valid
+            try:
+                ipaddress.ip_network(exclude, strict=False)
+            except ValueError:
+                try:
+                    ipaddress.ip_address(exclude.split('/')[0])
+                except ValueError:
+                    return False, f"Invalid config: exclude '{exclude}' is not valid IP or CIDR"
+
+    # Check ports policy
+    ports_policy_str = config.get('scan', {}).get('ports', 'top-1000')
+    if ports_policy_str not in ['top-1000', 'top-100', 'all']:
+        # Check if it's a comma-separated list of ports
+        try:
+            if ',' in ports_policy_str:
+                ports = [int(p.strip()) for p in ports_policy_str.split(',')]
+                for p in ports:
+                    if not (1 <= p <= 65535):
+                        return False, f"Invalid config: port {p} out of range (1-65535)"
+            else:
+                return False, f"Invalid config: ports policy '{ports_policy_str}' is invalid"
+        except (ValueError, AttributeError):
+            return False, f"Invalid config: ports policy '{ports_policy_str}' is invalid"
+
+    # Check booleans
+    for key in ['brute', 'graph', 'email', 'verbose', 'excel']:
+        if key in resolved and not isinstance(resolved[key], bool):
+            return False, f"Invalid config: {key} must be boolean"
+
+    # Warn about unknown top-level keys (only if verbose or config flag)
+    known_keys = {'targets', 'scan', 'report', 'bruteforce', 'general', 'email'}
+    if verbose or sys.argv[1:2] == ['--config']:
+        for key in config.keys():
+            if key not in known_keys:
+                print(f"Warning: unknown config key '{key}'", file=sys.stderr)
+
+    return True, ""
+
+
+def print_config(resolved: Dict[str, Any], config_file_used: str, config_exists: bool, config_valid: bool) -> None:
+    """Print resolved configuration with provenance in JSON format."""
     output = {
+        'config_file_used': config_file_used,
+        'config_exists': config_exists,
+        'config_valid': config_valid,
         'networks': resolved['networks'],
         'excludes': sorted(list(resolved['excludes'])),
         'brute': resolved['brute'],
@@ -250,16 +317,29 @@ def main():
 
     args = parser.parse_args()
 
+    # Convert config file to absolute path
+    config_file_path = Path(args.config_file).resolve()
+    config_file_used = str(config_file_path)
+    config_exists = config_file_path.exists()
+
     # Load config file (errors if not found)
     config = load_config(args.config_file)
 
     # Merge configurations
     resolved = merge_configs(args, config)
 
+    # Validate configuration
+    config_valid, error_msg = validate_config(resolved, config, args.target, args.verbose)
+
     # If --config flag, print and exit
     if args.config:
-        print_config(resolved)
+        print_config(resolved, config_file_used, config_exists, config_valid)
         sys.exit(0)
+
+    # If validation failed, print error and exit
+    if not config_valid:
+        print(f"Error: {error_msg}", file=sys.stderr)
+        sys.exit(1)
 
     # Determine ports policy
     ports_policy = "top-1000"
@@ -294,10 +374,11 @@ def main():
 
     print("Scan completed.")
 
-    # Add runtime metadata to results
+    # Add runtime metadata and provenance to results
     results["started_at"] = start_time.isoformat()
     results["finished_at"] = finish_time.isoformat()
     results["duration_seconds"] = duration
+    results["config_file_used"] = config_file_used
 
     # Determine output directory
     out_dir = "./out"
