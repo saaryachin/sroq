@@ -450,17 +450,17 @@ def main():
         if graph_path:
             logger.info(f"Saved graph: {graph_path}")
 
-    # Export CSV if requested
-    if resolved['csv']:
+    # Determine if CSV is needed (either directly or for Excel)
+    want_csv = resolved['csv'] or resolved['excel']
+
+    # Export CSV if needed
+    if want_csv:
         csv_path = generate_csv(results, out_dir)
         if csv_path:
             logger.info(f"Saved CSV: {csv_path}")
 
-    # Export Excel if requested (also generates CSV)
+    # Export Excel if requested
     if resolved['excel']:
-        csv_path = generate_csv(results, out_dir)
-        if csv_path:
-            logger.info(f"Saved CSV: {csv_path}")
         excel_path = generate_excel(results, out_dir)
         if excel_path:
             logger.info(f"Saved Excel: {excel_path}")
