@@ -18,10 +18,6 @@ email:
   # YAML-first precedence:
   # Values defined here override environment variables.
   # If a key is missing here, Sroq falls back to SMTP_* / SROQ_* env vars.
-  #
-  # SECURITY NOTE:
-  # Do NOT commit real passwords to version control.
-  # Use environment variables or a gitignored local config file.
 
   smtp_host: "smtp.gmail.com"
   smtp_port: 465
