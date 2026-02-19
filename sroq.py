@@ -3,6 +3,7 @@
 import argparse
 import sys
 import json
+import logging
 from pathlib import Path
 from typing import Optional, Dict, List, Set, Any, Tuple
 from datetime import datetime
@@ -18,6 +19,8 @@ from lib.sroq_scan import run_scan
 from lib.sroq_report import generate_severity_graph
 from lib.sroq_export import generate_csv
 from lib.sroq_excel import generate_excel
+from lib.sroq_log import setup_logging
+from lib.sroq_email import send_report
 
 
 def load_config(config_file: str) -> Dict[str, Any]:
@@ -249,6 +252,7 @@ def print_config(resolved: Dict[str, Any], config_file_used: str, config_exists:
 
 def print_summary(results: Dict[str, Any]) -> None:
     """Print minimal scan summary to console."""
+    logger = logging.getLogger("sroq")
     for network in results['networks']:
         name = network['name']
         cidr = network['cidr']
@@ -264,21 +268,20 @@ def print_summary(results: Dict[str, Any]) -> None:
             for level, count in host['vulners']['severity'].items():
                 agg_severity[level] += count
 
-        print(f"Network: {name}")
-        print(f"  CIDR: {cidr}")
-        print(f"  Hosts: {num_hosts}")
-        print(f"  Total Open Ports: {total_open_ports}")
-        print(f"  Total Unique CVEs: {total_cves}")
-        print(f"  Max CVSS: {max_cvss}")
-        print(f"  Severity: critical={agg_severity['critical']} high={agg_severity['high']} medium={agg_severity['medium']} low={agg_severity['low']} unknown={agg_severity['unknown']}")
+        logger.info(f"Network: {name}")
+        logger.info(f"  CIDR: {cidr}")
+        logger.info(f"  Hosts: {num_hosts}")
+        logger.info(f"  Total Open Ports: {total_open_ports}")
+        logger.info(f"  Total Unique CVEs: {total_cves}")
+        logger.info(f"  Max CVSS: {max_cvss}")
+        logger.info(f"  Severity: critical={agg_severity['critical']} high={agg_severity['high']} medium={agg_severity['medium']} low={agg_severity['low']} unknown={agg_severity['unknown']}")
 
         # Top risky hosts (up to 3, sorted by risk_score desc)
         top = sorted(hosts, key=lambda h: -h.get('risk_score', 0))[:3]
         if top:
-            print(f"  Top risky hosts:")
+            logger.info(f"  Top risky hosts:")
             for h in top:
-                print(f"    {h['ip']}  risk={h.get('risk_score', 0)}  CVEs={h['vulners']['unique_cve_count']}  max_cvss={h['vulners']['max_cvss']}")
-        print()
+                logger.info(f"    {h['ip']}  risk={h.get('risk_score', 0)}  CVEs={h['vulners']['unique_cve_count']}  max_cvss={h['vulners']['max_cvss']}")
 
 
 def main():
@@ -329,7 +332,7 @@ def main():
 
     parser.add_argument(
         '-e', '--email',
-        help='Include email collection',
+        help='Send scan report via email (requires SMTP_* env vars)',
         action='store_true',
     )
 
@@ -354,6 +357,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Setup logging
+    logger = setup_logging(verbose=args.verbose)
 
     # Convert config file to absolute path
     config_file_path = Path(args.config_file).resolve()
@@ -390,7 +396,7 @@ def main():
         credfile = config['bruteforce']['credfile']
 
     # Run scan with runtime tracking
-    print("Starting scan...")
+    logger.info("Starting scan...")
 
     start_time = datetime.now()
 
@@ -404,13 +410,13 @@ def main():
             resolved['verbose']
         )
     except KeyboardInterrupt:
-        print("\nScan interrupted.")
+        logger.warning("Scan interrupted.")
         sys.exit(130)
 
     finish_time = datetime.now()
     duration = (finish_time - start_time).total_seconds()
 
-    print("Scan completed.")
+    logger.info("Scan completed.")
 
     # Add runtime metadata and provenance to results
     results["started_at"] = start_time.isoformat()
@@ -436,28 +442,55 @@ def main():
 
     # Print summary
     print_summary(results)
-    print(f"Saved JSON: {json_path}")
+    logger.info(f"Saved JSON: {json_path}")
 
     # Generate graph if requested
     if resolved['graph']:
         graph_path = generate_severity_graph(results, out_dir)
         if graph_path:
-            print(f"Saved graph: {graph_path}")
+            logger.info(f"Saved graph: {graph_path}")
 
     # Export CSV if requested
     if resolved['csv']:
         csv_path = generate_csv(results, out_dir)
         if csv_path:
-            print(f"Saved CSV: {csv_path}")
+            logger.info(f"Saved CSV: {csv_path}")
 
     # Export Excel if requested (also generates CSV)
     if resolved['excel']:
         csv_path = generate_csv(results, out_dir)
         if csv_path:
-            print(f"Saved CSV: {csv_path}")
+            logger.info(f"Saved CSV: {csv_path}")
         excel_path = generate_excel(results, out_dir)
         if excel_path:
-            print(f"Saved Excel: {excel_path}")
+            logger.info(f"Saved Excel: {excel_path}")
+
+    # Send email report if requested
+    if resolved['email']:
+        timestamp = results.get('timestamp', '')
+        attachments = {}
+
+        # Build list of attachments that exist
+        csv_file = Path(out_dir) / f"sroq_{timestamp}.csv"
+        if csv_file.exists():
+            attachments[csv_file.name] = str(csv_file)
+
+        xlsx_file = Path(out_dir) / f"sroq_{timestamp}.xlsx"
+        if xlsx_file.exists():
+            attachments[xlsx_file.name] = str(xlsx_file)
+
+        png_file = Path(out_dir) / f"sroq_{timestamp}.png"
+        if png_file.exists():
+            attachments[png_file.name] = str(png_file)
+
+        json_file = Path(out_dir) / f"sroq_{timestamp}.json"
+        if json_file.exists():
+            attachments[json_file.name] = str(json_file)
+
+        if send_report(results, out_dir, attachments):
+            logger.info("Email report sent successfully")
+        else:
+            logger.error("Failed to send email report")
 
 
 if __name__ == '__main__':

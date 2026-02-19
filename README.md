@@ -74,9 +74,61 @@ Generate Excel (also generates CSV automatically):
 
 `python3 sroq.py -x`
 
+Send email report (requires SMTP_* env vars):
+
+`python3 sroq.py -e`
+
 Scan specific target:
 
 `python3 sroq.py -t 172.16.1.0/24`
+
+Verbose output:
+
+`python3 sroq.py -v`
+
+---
+
+## Email Configuration
+
+To send scan reports via email, set these environment variables before running:
+
+**Required:**
+- `SMTP_HOST` - SMTP server hostname (e.g., `smtp.gmail.com`)
+- `SMTP_PORT` - SMTP port (typically 465 for SSL, 587 for TLS)
+- `SMTP_USER` - SMTP username (usually your email address)
+- `SMTP_PASS` - SMTP password or app-specific password
+- `SROQ_EMAIL_TO` - Recipient email address
+
+**Optional:**
+- `SROQ_EMAIL_FROM` - Sender email address (defaults to SMTP_USER if not set)
+
+Example:
+
+```bash
+export SMTP_HOST="smtp.gmail.com"
+export SMTP_PORT="465"
+export SMTP_USER="your-email@gmail.com"
+export SMTP_PASS="your-app-password"
+export SROQ_EMAIL_TO="recipient@example.com"
+
+python3 sroq.py -e
+```
+
+Email report includes:
+- Network summary (total hosts, total CVEs)
+- Top 5 riskiest hosts globally
+- Attachments (CSV, XLSX, PNG, JSON if generated)
+
+---
+
+## Security Notes
+
+**⚠️ Do NOT commit credentials or secrets to version control:**
+
+- Never commit `sroq.yml` if it contains actual scan targets/credentials
+- Never commit shell scripts with hardcoded SMTP passwords
+- Use environment variables or `.env` files (add to `.gitignore`) for sensitive data
+- Consider using a secrets manager for automated deployments
 
 ---
 
@@ -121,11 +173,9 @@ Graph output:
 ## Requirements
 
 - Python 3.9+
-    
 - nmap
-    
+- python-nmap
+- PyYAML
 - matplotlib
-    
 - openpyxl
-    
 - jq (optional, for validation)
