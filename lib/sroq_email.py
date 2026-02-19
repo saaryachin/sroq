@@ -11,45 +11,60 @@ from smtplib import SMTP_SSL
 import logging
 
 
-def _get_env(var: str) -> str:
-    """Get environment variable, raise error if not found."""
-    value = os.getenv(var)
-    if not value:
-        raise ValueError(f"Environment variable {var} is not set")
-    return value
-
-
-def send_report(results: dict, output_dir: str, attachments: dict = None) -> bool:
+def send_report(results: dict, output_dir: str, attachments: dict = None, email_cfg: dict = None) -> bool:
     """
     Send scan summary and attachments via email.
 
-    Environment variables required:
-    - SMTP_HOST: SMTP server hostname
-    - SMTP_PORT: SMTP port (typically 465 for SSL)
-    - SMTP_USER: SMTP username (usually email)
-    - SMTP_PASS: SMTP password
-    - SROQ_EMAIL_TO: Recipient email address
-    - SROQ_EMAIL_FROM (optional): Sender email (defaults to SMTP_USER)
+    Supports email config from YAML with environment variable overrides.
+
+    YAML config keys (email_cfg):
+    - smtp_host: SMTP server hostname
+    - smtp_port: SMTP port (typically 465 for SSL)
+    - smtp_user: SMTP username (usually email)
+    - smtp_pass: SMTP password
+    - to: Recipient email address
+    - from (optional): Sender email (defaults to smtp_user)
+
+    Environment variables (override YAML):
+    - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SROQ_EMAIL_TO, SROQ_EMAIL_FROM
 
     Args:
         results: Scan results dict
         output_dir: Output directory (for finding attachments)
         attachments: dict of {filename: full_path} to attach (e.g., CSV, XLSX, PNG)
+        email_cfg: Optional dict with email config from YAML
 
     Returns:
         bool: True if sent successfully, False otherwise.
     """
     logger = logging.getLogger("sroq")
 
-    # Get SMTP config from environment
+    if email_cfg is None:
+        email_cfg = {}
+
+    # Resolve SMTP config: YAML first, then env var overrides
+    smtp_host = os.getenv("SMTP_HOST") or email_cfg.get("smtp_host")
+    smtp_port_value = email_cfg.get("smtp_port")
+    smtp_port_str = smtp_port_value if smtp_port_value else os.getenv("SMTP_PORT", "")
+    smtp_user = os.getenv("SMTP_USER") or email_cfg.get("smtp_user")
+    smtp_pass = os.getenv("SMTP_PASS") or email_cfg.get("smtp_pass")
+    email_to = os.getenv("SROQ_EMAIL_TO") or email_cfg.get("to")
+    email_from = os.getenv("SROQ_EMAIL_FROM") or email_cfg.get("from") or smtp_user
+
+    # Validate required fields
     try:
-        smtp_host = _get_env("SMTP_HOST")
-        smtp_port = int(_get_env("SMTP_PORT"))
-        smtp_user = _get_env("SMTP_USER")
-        smtp_pass = _get_env("SMTP_PASS")
-        email_to = _get_env("SROQ_EMAIL_TO")
-        email_from = os.getenv("SROQ_EMAIL_FROM", smtp_user)
-    except ValueError as e:
+        if not smtp_host:
+            raise ValueError("SMTP_HOST not configured")
+        if not smtp_port_str:
+            raise ValueError("SMTP_PORT not configured")
+        smtp_port = int(smtp_port_str)
+        if not smtp_user:
+            raise ValueError("SMTP_USER not configured")
+        if not smtp_pass:
+            raise ValueError("SMTP_PASS not configured")
+        if not email_to:
+            raise ValueError("SROQ_EMAIL_TO not configured")
+    except (ValueError, TypeError) as e:
         logger.error(f"Email config error: {e}")
         return False
 
