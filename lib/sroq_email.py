@@ -42,14 +42,13 @@ def send_report(results: dict, output_dir: str, attachments: dict = None, email_
     if email_cfg is None:
         email_cfg = {}
 
-    # Resolve SMTP config: YAML first, then env var overrides
-    smtp_host = os.getenv("SMTP_HOST") or email_cfg.get("smtp_host")
-    smtp_port_value = email_cfg.get("smtp_port")
-    smtp_port_str = smtp_port_value if smtp_port_value else os.getenv("SMTP_PORT", "")
-    smtp_user = os.getenv("SMTP_USER") or email_cfg.get("smtp_user")
-    smtp_pass = os.getenv("SMTP_PASS") or email_cfg.get("smtp_pass")
-    email_to = os.getenv("SROQ_EMAIL_TO") or email_cfg.get("to")
-    email_from = os.getenv("SROQ_EMAIL_FROM") or email_cfg.get("from") or smtp_user
+    # Resolve SMTP config: YAML first, then env var fallback
+    smtp_host = email_cfg.get("smtp_host") or os.getenv("SMTP_HOST")
+    smtp_port_str = str(email_cfg.get("smtp_port") or "") or os.getenv("SMTP_PORT", "")
+    smtp_user = email_cfg.get("smtp_user") or os.getenv("SMTP_USER")
+    smtp_pass = email_cfg.get("smtp_pass") or os.getenv("SMTP_PASS")
+    email_to = email_cfg.get("to") or os.getenv("SROQ_EMAIL_TO")
+    email_from = email_cfg.get("from") or os.getenv("SROQ_EMAIL_FROM") or smtp_user
 
     # Validate required fields
     try:

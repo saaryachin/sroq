@@ -97,6 +97,7 @@ def merge_configs(cli_args: argparse.Namespace, config: Dict[str, Any]) -> Dict[
         'email': False,
         'excel': False,
         'verbose': False,
+        'email_cfg': {},
         'config_file': cli_args.config_file,
     }
 
@@ -125,6 +126,10 @@ def merge_configs(cli_args: argparse.Namespace, config: Dict[str, Any]) -> Dict[
         resolved['csv'] = report.get('csv_default', False)
         resolved['email'] = report.get('email_default', False)
         resolved['excel'] = report.get('excel_default', False)
+
+    # Load email config from email section
+    if 'email' in config and isinstance(config['email'], dict):
+        resolved['email_cfg'] = config['email']
 
     # brute defaults to False (no config default)
     resolved['brute'] = False
@@ -487,7 +492,8 @@ def main():
         if json_file.exists():
             attachments[json_file.name] = str(json_file)
 
-        if send_report(results, out_dir, attachments):
+        email_cfg = resolved.get("email_cfg", {})
+        if send_report(results, out_dir, attachments=attachments, email_cfg=email_cfg):
             logger.info("Email report sent successfully")
         else:
             logger.error("Failed to send email report")
