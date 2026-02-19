@@ -1,39 +1,29 @@
 # Sroq
 
-**Sroq** is a lightweight network vulnerability reporting tool built around Nmap + vulners.
+**Sroq** is a lightweight, headless network vulnerability reporting tool built around **Nmap + vulners**.
 
-It performs network scans, aggregates unique CVEs per host, calculates weighted risk scores, and generates structured reports in JSON, PNG, CSV, and Excel formats.
+It performs network scans, aggregates unique CVEs per host, calculates weighted risk scores, generates structured reports in JSON, PNG, CSV, and Excel formats, and can send an email report with the outputs attached.
 
-Designed to be simple, headless, and automation-friendly.
+Sroq is designed to be simple, deterministic, and automation-friendly.
 
 ---
 
 ## Features
 
-- Network scanning via `nmap -sV --script vulners`
-    
+- Network scanning via `nmap -sV --script vulners`    
 - Unique CVE aggregation per host
-    
 - Severity breakdown:
-    
     - critical / high / medium / low / unknown
-        
 - Deterministic CVE sorting (CVSS desc, ID asc)
-    
 - Weighted risk score per host
-    
-- CVSS sum metric per host
-    
-- Stacked severity graph (PNG)
-    
-- Flat reporting export:
-    
+- CVSS sum metric (`risk_cvss_sum`)
+- Stacked severity visualization (PNG)
+- Structured reporting export:
     - JSON
-        
     - CSV
-        
     - Excel (.xlsx)
-        
+- Optional automated email reporting with attachments
+    
 
 ---
 
@@ -41,18 +31,16 @@ Designed to be simple, headless, and automation-friendly.
 
 Weighted severity formula:
 
-`risk_score =   critical * 10 +   high     * 6  +   medium   * 3  +   low      * 1  +   unknown  * 2`
+`risk_score = critical * 10 + high * 6 + medium * 3 + low * 1 + unknown * 2`
 
 This intentionally biases toward high-impact vulnerabilities.
 
 Additionally:
 
 - `risk_cvss_sum` = sum of unique CVE CVSS values
-    
 - `max_cvss` per host
-    
 - Full unique CVE list stored in JSON
-    
+- Hosts sorted by descending `risk_score` in graph and email output
 
 ---
 
@@ -70,11 +58,11 @@ Generate CSV:
 
 `python3 sroq.py -c`
 
-Generate Excel (also generates CSV automatically):
+Generate Excel (automatically generates CSV as well):
 
 `python3 sroq.py -x`
 
-Send email report (requires SMTP_* env vars):
+Send email report:
 
 `python3 sroq.py -e`
 
@@ -88,47 +76,57 @@ Verbose output:
 
 ---
 
-## Email Configuration
+## Configuration (`sroq.yml`)
 
-To send scan reports via email, set these environment variables before running:
+Sroq behavior can be controlled via `sroq.yml`.
 
-**Required:**
-- `SMTP_HOST` - SMTP server hostname (e.g., `smtp.gmail.com`)
-- `SMTP_PORT` - SMTP port (typically 465 for SSL, 587 for TLS)
-- `SMTP_USER` - SMTP username (usually your email address)
-- `SMTP_PASS` - SMTP password or app-specific password
-- `SROQ_EMAIL_TO` - Recipient email address
+### Report Defaults
 
-**Optional:**
-- `SROQ_EMAIL_FROM` - Sender email address (defaults to SMTP_USER if not set)
+These control default behavior when CLI flags are not specified.
 
-Example:
+`report:   graph_default: false   csv_default: false   excel_default: false   email_default: false`
 
-```bash
-export SMTP_HOST="smtp.gmail.com"
-export SMTP_PORT="465"
-export SMTP_USER="your-email@gmail.com"
-export SMTP_PASS="your-app-password"
-export SROQ_EMAIL_TO="recipient@example.com"
-
-python3 sroq.py -e
-```
-
-Email report includes:
-- Network summary (total hosts, total CVEs)
-- Top 5 riskiest hosts globally
-- Attachments (CSV, XLSX, PNG, JSON if generated)
+CLI flags always override these defaults.
 
 ---
 
-## Security Notes
+## Email Configuration
 
-**⚠️ Do NOT commit credentials or secrets to version control:**
+Sroq supports two configuration methods for SMTP settings:
 
-- Never commit `sroq.yml` if it contains actual scan targets/credentials
-- Never commit shell scripts with hardcoded SMTP passwords
-- Use environment variables or `.env` files (add to `.gitignore`) for sensitive data
-- Consider using a secrets manager for automated deployments
+1. `email:` block in `sroq.yml` (recommended for lab use)
+    
+2. Environment variables (`SMTP_*`, `SROQ_*`)
+    
+
+### Configuration Precedence
+
+1. Values defined under `email:` in `sroq.yml`
+    
+2. Environment variables (used only if a key is missing in YAML)
+    
+
+This allows fully self-contained lab configuration while still supporting secure overrides in CI or production environments.
+
+---
+
+### Example `sroq.yml`
+
+`email:   smtp_host: "smtp.gmail.com"   smtp_port: 465   smtp_user: "YOUR_EMAIL@gmail.com"   smtp_pass: "YOUR_APP_PASSWORD"   to: "RECIPIENT_EMAIL@gmail.com"   # from: "optional_sender@gmail.com"  # defaults to smtp_user if omitted`
+
+---
+
+### Environment Variable Alternative
+
+`export SMTP_HOST="smtp.gmail.com" export SMTP_PORT="465" export SMTP_USER="your-email@gmail.com" export SMTP_PASS="your-app-password" export SROQ_EMAIL_TO="recipient@example.com"  python3 sroq.py -e`
+
+---
+
+### Email Report Includes
+
+- Network summary (total networks, hosts, CVEs    
+- Top 5 riskiest hosts globally
+- Attachments (CSV, XLSX, PNG, JSON if generated)
 
 ---
 
@@ -142,40 +140,33 @@ All outputs share the same base filename:
 
 ## Output Structure
 
-Each host contains:
+Each host entry contains:
 
-- Open ports
-    
+- Open ports    
 - Unique CVE count
-    
 - Full CVE list (id + cvss)
-    
 - Severity distribution
-    
-- max_cvss
-    
-- risk_score
-    
-- risk_cvss_sum
-    
+- `max_cvss`
+- `risk_score`
+- `risk_cvss_sum`
+### Graph Output
 
-Graph output:
-
-- Hosts sorted by descending risk_score
-    
+- Hosts sorted by descending `risk_score    
 - Stacked severity bars
-    
 - Annotated with CVE count and risk score
-    
 
 ---
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.9+    
 - nmap
 - python-nmap
 - PyYAML
 - matplotlib
 - openpyxl
 - jq (optional, for validation)
+
+## Author, License
+
+Written by Saar Yachin, https://www.saaryachin.com, with the assistance of Chat and Claude. Check out my other cybersecurity and homelab repos! 

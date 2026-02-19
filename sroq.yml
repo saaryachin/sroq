@@ -1,4 +1,4 @@
-targets:
+ttargets:
   networks:
     - name: "lab"
       cidr: "172.16.1.32/29"
@@ -8,10 +8,27 @@ scan:
   ports: "top-1000"
 
 report:
+  # Default reporting behavior (can be overridden via CLI flags)
   graph_default: false
+  csv_default: false
   excel_default: false
   email_default: false
 
+email:
+  # YAML-first precedence:
+  # Values defined here override environment variables.
+  # If a key is missing here, Sroq falls back to SMTP_* / SROQ_* env vars.
+  #
+  # SECURITY NOTE:
+  # Do NOT commit real passwords to version control.
+  # Use environment variables or a gitignored local config file.
+
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 465
+  smtp_user: "YOUR_EMAIL@gmail.com"
+  smtp_pass: "YOUR_APP_PASSWORD"
+  to: "RECIPIENT_EMAIL@gmail.com"
+  # from: "optional_sender@gmail.com"  # defaults to smtp_user if omitted
+
 bruteforce:
   credfile: "./creds.example.txt"
-
